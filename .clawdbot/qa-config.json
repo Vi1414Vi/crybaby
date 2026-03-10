@@ -1,0 +1,31 @@
+{
+  "project": "crybaby",
+  "description": "Calisthenics workout app - Vite + React + Convex",
+  "devCommand": "bun run dev",
+  "baseUrl": "http://localhost:5173",
+  "port": 5173,
+  "auth": {
+    "type": "none",
+    "notes": "App has auth but can test public flows or use test accounts"
+  },
+  "stagehand": {
+    "modelName": "anthropic/claude-sonnet-4-20250514",
+    "modelClientOptions": {
+      "apiKey": "OPENROUTER_API_KEY"
+    },
+    "headless": true,
+    "recordVideo": true,
+    "videoDir": "./test-recordings"
+  },
+  "env": {
+    "OPENROUTER_API_KEY": "~/.openclaw/secrets/openrouter.env"
+  },
+  "setup": [
+    "bun install"
+  ],
+  "teardown": [],
+  "convex": {
+    "deployKeyEnv": "CONVEX_DEPLOY_KEY",
+    "deployKeyPath": "~/.openclaw/secrets/crybaby.env"
+  }
+}
