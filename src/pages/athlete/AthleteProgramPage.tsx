@@ -7,6 +7,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 interface EntryState {
   exerciseSlotId: Id<"exerciseSlots">;
@@ -28,6 +29,7 @@ export default function AthleteProgramPage() {
   const [logging, setLogging] = useState(searchParams.get("log") === "1");
   const [entries, setEntries] = useState<Map<string, EntryState>>(new Map());
   const [saving, setSaving] = useState(false);
+  const [currentDay, setCurrentDay] = useState(1);
 
   if (program === undefined) {
     return <p className="text-muted-foreground">Loading...</p>;
@@ -37,7 +39,17 @@ export default function AthleteProgramPage() {
     return <p className="text-muted-foreground">Program not found.</p>;
   }
 
-  const sortedSets = [...program.sets].sort((a, b) => a.order - b.order);
+  // Group sets by day
+  const days = [...new Set(program.sets.map((s) => s.day ?? 1))].sort(
+    (a, b) => a - b
+  );
+  // Ensure currentDay is valid for this program
+  const validCurrentDay = days.includes(currentDay) ? currentDay : days[0] ?? 1;
+
+  const setsForDay = (day: number) =>
+    program.sets
+      .filter((s) => (s.day ?? 1) === day)
+      .sort((a, b) => a.order - b.order);
 
   const updateEntry = (
     slotId: string,
@@ -114,131 +126,152 @@ export default function AthleteProgramPage() {
         {program.duration} {program.duration === 1 ? "week" : "weeks"}
       </p>
 
-      {sortedSets.map((set) => (
-        <Card key={set._id}>
-          <CardHeader>
-            <CardTitle className="font-heading text-lg uppercase">
-              Set {set.order}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-4">
-            {set.slots.map((slot) => {
-              const sortedScales = [...slot.scales].sort(
-                (a, b) => a.level - b.level,
-              );
-              const entry = entries.get(slot._id);
+      <Tabs
+        value={String(validCurrentDay)}
+        onValueChange={(value) => setCurrentDay(parseInt(value))}
+      >
+        <TabsList>
+          {days.map((day) => (
+            <TabsTrigger key={day} value={String(day)}>
+              Day {day}
+            </TabsTrigger>
+          ))}
+        </TabsList>
 
-              return (
-                <div key={slot._id} className="space-y-2">
-                  <div className="flex items-center gap-2">
-                    <Badge variant="outline">{slot.position}</Badge>
-                  </div>
+        {days.map((day) => (
+          <TabsContent key={day} value={String(day)} className="space-y-4">
+            {setsForDay(day).map((set) => (
+              <Card key={set._id}>
+                <CardHeader>
+                  <CardTitle className="font-heading text-lg uppercase">
+                    Set {set.order}
+                  </CardTitle>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                  {set.slots.map((slot) => {
+                    const sortedScales = [...slot.scales].sort(
+                      (a, b) => a.level - b.level
+                    );
+                    const entry = entries.get(slot._id);
 
-                  <div className="overflow-x-auto">
-                    <table className="w-full text-sm">
-                      <thead>
-                        <tr className="border-b text-left">
-                          <th className="pb-1 pr-4 font-medium">Level</th>
-                          <th className="pb-1 pr-4 font-medium">Exercise</th>
-                          <th className="pb-1 pr-4 font-medium">Type</th>
-                          <th className="pb-1 font-medium">Target</th>
-                          {logging && (
-                            <>
-                              <th className="pb-1 pl-4 font-medium">Pick</th>
-                              <th className="pb-1 pl-4 font-medium">Actual</th>
-                            </>
-                          )}
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {sortedScales.map((scale) => {
-                          const isChosen =
-                            logging &&
-                            entry?.levelChosen === scale.level;
+                    return (
+                      <div key={slot._id} className="space-y-2">
+                        <div className="flex items-center gap-2">
+                          <Badge variant="outline">{slot.position}</Badge>
+                        </div>
 
-                          return (
-                            <tr
-                              key={scale._id}
-                              className={
-                                isChosen
-                                  ? "bg-primary/10"
-                                  : ""
-                              }
-                            >
-                              <td className="py-1 pr-4">
-                                <Badge variant="secondary" className="text-xs">
-                                  Lvl {scale.level}
-                                </Badge>
-                              </td>
-                              <td className="py-1 pr-4">
-                                {scale.exerciseName}
-                              </td>
-                              <td className="py-1 pr-4 capitalize">
-                                {scale.type}
-                              </td>
-                              <td className="py-1">{scale.targetValue}</td>
-                              {logging && (
-                                <>
-                                  <td className="py-1 pl-4">
-                                    <input
-                                      type="radio"
-                                      name={`level-${slot._id}`}
-                                      checked={isChosen}
-                                      onChange={() =>
-                                        updateEntry(
-                                          slot._id,
-                                          "levelChosen",
-                                          scale.level,
-                                        )
-                                      }
-                                    />
-                                  </td>
-                                  <td className="py-1 pl-4">
-                                    {isChosen && (
-                                      <Input
-                                        type="number"
-                                        className="h-7 w-20"
-                                        placeholder={
-                                          scale.type === "reps"
-                                            ? "reps"
-                                            : "secs"
-                                        }
-                                        value={entry?.actualValue ?? ""}
-                                        onChange={(e) =>
-                                          updateEntry(
-                                            slot._id,
-                                            "actualValue",
-                                            e.target.value,
-                                          )
-                                        }
-                                      />
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-sm">
+                            <thead>
+                              <tr className="border-b text-left">
+                                <th className="pb-1 pr-4 font-medium">Level</th>
+                                <th className="pb-1 pr-4 font-medium">
+                                  Exercise
+                                </th>
+                                <th className="pb-1 pr-4 font-medium">Type</th>
+                                <th className="pb-1 font-medium">Target</th>
+                                {logging && (
+                                  <>
+                                    <th className="pb-1 pl-4 font-medium">
+                                      Pick
+                                    </th>
+                                    <th className="pb-1 pl-4 font-medium">
+                                      Actual
+                                    </th>
+                                  </>
+                                )}
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {sortedScales.map((scale) => {
+                                const isChosen =
+                                  logging && entry?.levelChosen === scale.level;
+
+                                return (
+                                  <tr
+                                    key={scale._id}
+                                    className={isChosen ? "bg-primary/10" : ""}
+                                  >
+                                    <td className="py-1 pr-4">
+                                      <Badge
+                                        variant="secondary"
+                                        className="text-xs"
+                                      >
+                                        Lvl {scale.level}
+                                      </Badge>
+                                    </td>
+                                    <td className="py-1 pr-4">
+                                      {scale.exerciseName}
+                                    </td>
+                                    <td className="py-1 pr-4 capitalize">
+                                      {scale.type}
+                                    </td>
+                                    <td className="py-1">{scale.targetValue}</td>
+                                    {logging && (
+                                      <>
+                                        <td className="py-1 pl-4">
+                                          <input
+                                            type="radio"
+                                            name={`level-${slot._id}`}
+                                            checked={isChosen}
+                                            onChange={() =>
+                                              updateEntry(
+                                                slot._id,
+                                                "levelChosen",
+                                                scale.level
+                                              )
+                                            }
+                                          />
+                                        </td>
+                                        <td className="py-1 pl-4">
+                                          {isChosen && (
+                                            <Input
+                                              type="number"
+                                              className="h-7 w-20"
+                                              placeholder={
+                                                scale.type === "reps"
+                                                  ? "reps"
+                                                  : "secs"
+                                              }
+                                              value={entry?.actualValue ?? ""}
+                                              onChange={(e) =>
+                                                updateEntry(
+                                                  slot._id,
+                                                  "actualValue",
+                                                  e.target.value
+                                                )
+                                              }
+                                            />
+                                          )}
+                                        </td>
+                                      </>
                                     )}
-                                  </td>
-                                </>
-                              )}
-                            </tr>
-                          );
-                        })}
-                      </tbody>
-                    </table>
-                  </div>
+                                  </tr>
+                                );
+                              })}
+                            </tbody>
+                          </table>
+                        </div>
 
-                  {logging && entry && (
-                    <Input
-                      placeholder="Notes (optional)"
-                      className="mt-1"
-                      value={entry.notes}
-                      onChange={(e) =>
-                        updateEntry(slot._id, "notes", e.target.value)
-                      }
-                    />
-                  )}
-                </div>
-              );
-            })}
-          </CardContent>
-        </Card>
-      ))}
+                        {logging && entry && (
+                          <Input
+                            placeholder="Notes (optional)"
+                            className="mt-1"
+                            value={entry.notes}
+                            onChange={(e) =>
+                              updateEntry(slot._id, "notes", e.target.value)
+                            }
+                          />
+                        )}
+                      </div>
+                    );
+                  })}
+                </CardContent>
+              </Card>
+            ))}
+          </TabsContent>
+        ))}
+      </Tabs>
     </div>
   );
 }

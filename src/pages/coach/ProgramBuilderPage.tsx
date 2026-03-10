@@ -3,6 +3,7 @@ import { useMutation } from "convex/react";
 import { useNavigate } from "react-router";
 import { api } from "../../../convex/_generated/api";
 import { Button } from "@/components/ui/button";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { ProgramForm } from "@/components/program-builder/ProgramForm";
 import { SetCard } from "@/components/program-builder/SetCard";
 
@@ -25,6 +26,7 @@ export interface SlotState {
 export interface SetState {
   id: string;
   order: number;
+  day: number;
   slots: SlotState[];
 }
 
@@ -34,6 +36,8 @@ interface ProgramFormState {
   description: string;
   password: string;
   sets: SetState[];
+  days: number[];
+  currentDay: number;
 }
 
 // --- Helpers ---
@@ -58,10 +62,11 @@ function makeSlot(position: string): SlotState {
   };
 }
 
-function makeSet(order: number): SetState {
+function makeSet(order: number, day: number): SetState {
   return {
     id: crypto.randomUUID(),
     order,
+    day,
     slots: [makeSlot("A")],
   };
 }
@@ -83,7 +88,9 @@ type Action =
       scaleId: string;
       field: string;
       value: string;
-    };
+    }
+  | { type: "ADD_DAY" }
+  | { type: "SET_CURRENT_DAY"; day: number };
 
 function reducer(state: ProgramFormState, action: Action): ProgramFormState {
   switch (action.type) {
@@ -91,15 +98,43 @@ function reducer(state: ProgramFormState, action: Action): ProgramFormState {
       return { ...state, [action.field]: action.value };
 
     case "ADD_SET": {
-      const nextOrder = state.sets.length + 1;
-      return { ...state, sets: [...state.sets, makeSet(nextOrder)] };
+      const setsForDay = state.sets.filter((s) => s.day === state.currentDay);
+      const nextOrder = setsForDay.length + 1;
+      return {
+        ...state,
+        sets: [...state.sets, makeSet(nextOrder, state.currentDay)],
+      };
     }
 
     case "REMOVE_SET": {
+      const setToRemove = state.sets.find((s) => s.id === action.setId);
+      if (!setToRemove) return state;
+      const dayOfRemoved = setToRemove.day;
       const sets = state.sets
         .filter((s) => s.id !== action.setId)
-        .map((s, i) => ({ ...s, order: i + 1 }));
+        .map((s) => {
+          if (s.day !== dayOfRemoved) return s;
+          const setsInDay = state.sets
+            .filter((ss) => ss.day === dayOfRemoved && ss.id !== action.setId)
+            .sort((a, b) => a.order - b.order);
+          const newOrder = setsInDay.findIndex((ss) => ss.id === s.id) + 1;
+          return { ...s, order: newOrder };
+        });
       return { ...state, sets };
+    }
+
+    case "ADD_DAY": {
+      const newDay = Math.max(...state.days) + 1;
+      return {
+        ...state,
+        days: [...state.days, newDay],
+        sets: [...state.sets, makeSet(1, newDay)],
+        currentDay: newDay,
+      };
+    }
+
+    case "SET_CURRENT_DAY": {
+      return { ...state, currentDay: action.day };
     }
 
     case "ADD_SLOT": {
@@ -194,7 +229,9 @@ const initialState: ProgramFormState = {
   duration: 4,
   description: "",
   password: "",
-  sets: [makeSet(1)],
+  sets: [makeSet(1, 1)],
+  days: [1],
+  currentDay: 1,
 };
 
 // --- Component ---
@@ -217,6 +254,7 @@ export default function ProgramBuilderPage() {
         password: state.password.trim(),
         sets: state.sets.map((set) => ({
           order: set.order,
+          day: set.day,
           slots: set.slots.map((slot) => ({
             position: slot.position,
             scales: slot.scales.map((scale) => ({
@@ -255,48 +293,90 @@ export default function ProgramBuilderPage() {
 
       <div className="space-y-4">
         <div className="flex items-center justify-between">
-          <h2 className="font-heading text-xl uppercase">Sets</h2>
+          <h2 className="font-heading text-xl uppercase">Workout Days</h2>
           <Button
             variant="outline"
-            onClick={() => dispatch({ type: "ADD_SET" })}
+            onClick={() => dispatch({ type: "ADD_DAY" })}
           >
-            + Add Set
+            + Add Day
           </Button>
         </div>
 
-        {state.sets.map((set) => (
-          <SetCard
-            key={set.id}
-            set={set}
-            onAddSlot={() => dispatch({ type: "ADD_SLOT", setId: set.id })}
-            onRemoveSlot={(slotId) =>
-              dispatch({ type: "REMOVE_SLOT", setId: set.id, slotId })
-            }
-            onAddScale={(slotId) =>
-              dispatch({ type: "ADD_SCALE", setId: set.id, slotId })
-            }
-            onRemoveScale={(slotId, scaleId) =>
-              dispatch({
-                type: "REMOVE_SCALE",
-                setId: set.id,
-                slotId,
-                scaleId,
-              })
-            }
-            onUpdateScale={(slotId, scaleId, field, value) =>
-              dispatch({
-                type: "UPDATE_SCALE",
-                setId: set.id,
-                slotId,
-                scaleId,
-                field,
-                value,
-              })
-            }
-            onRemove={() => dispatch({ type: "REMOVE_SET", setId: set.id })}
-            canRemove={state.sets.length > 1}
-          />
-        ))}
+        <Tabs
+          value={String(state.currentDay)}
+          onValueChange={(value) =>
+            dispatch({ type: "SET_CURRENT_DAY", day: parseInt(value) })
+          }
+        >
+          <TabsList>
+            {state.days.map((day) => (
+              <TabsTrigger key={day} value={String(day)}>
+                Day {day}
+              </TabsTrigger>
+            ))}
+          </TabsList>
+
+          {state.days.map((day) => {
+            const setsForDay = state.sets
+              .filter((s) => s.day === day)
+              .sort((a, b) => a.order - b.order);
+
+            return (
+              <TabsContent key={day} value={String(day)} className="space-y-4">
+                <div className="flex items-center justify-between">
+                  <h3 className="font-heading text-lg uppercase">
+                    Day {day} Sets
+                  </h3>
+                  <Button
+                    variant="outline"
+                    size="sm"
+                    onClick={() => dispatch({ type: "ADD_SET" })}
+                  >
+                    + Add Set
+                  </Button>
+                </div>
+
+                {setsForDay.map((set) => (
+                  <SetCard
+                    key={set.id}
+                    set={set}
+                    onAddSlot={() =>
+                      dispatch({ type: "ADD_SLOT", setId: set.id })
+                    }
+                    onRemoveSlot={(slotId) =>
+                      dispatch({ type: "REMOVE_SLOT", setId: set.id, slotId })
+                    }
+                    onAddScale={(slotId) =>
+                      dispatch({ type: "ADD_SCALE", setId: set.id, slotId })
+                    }
+                    onRemoveScale={(slotId, scaleId) =>
+                      dispatch({
+                        type: "REMOVE_SCALE",
+                        setId: set.id,
+                        slotId,
+                        scaleId,
+                      })
+                    }
+                    onUpdateScale={(slotId, scaleId, field, value) =>
+                      dispatch({
+                        type: "UPDATE_SCALE",
+                        setId: set.id,
+                        slotId,
+                        scaleId,
+                        field,
+                        value,
+                      })
+                    }
+                    onRemove={() =>
+                      dispatch({ type: "REMOVE_SET", setId: set.id })
+                    }
+                    canRemove={setsForDay.length > 1}
+                  />
+                ))}
+              </TabsContent>
+            );
+          })}
+        </Tabs>
       </div>
     </div>
   );

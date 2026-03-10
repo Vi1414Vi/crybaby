@@ -118,6 +118,7 @@ const slotValidator = v.object({
 
 const setValidator = v.object({
   order: v.number(),
+  day: v.optional(v.number()), // which day this set belongs to (defaults to 1)
   slots: v.array(slotValidator),
 });
 
@@ -144,6 +145,7 @@ export const create = mutation({
         programId,
         order: set.order,
         numExercises,
+        day: set.day ?? 1,
       });
 
       for (const slot of set.slots) {
@@ -165,5 +167,31 @@ export const create = mutation({
     }
 
     return programId;
+  },
+});
+
+export const addDay = mutation({
+  args: { programId: v.id("programs") },
+  handler: async (ctx, args) => {
+    const sets = await ctx.db
+      .query("sets")
+      .withIndex("by_program", (q) => q.eq("programId", args.programId))
+      .collect();
+
+    const maxDay = sets.reduce((max, set) => Math.max(max, set.day), 0);
+    return maxDay + 1;
+  },
+});
+
+export const getDaysForProgram = query({
+  args: { programId: v.id("programs") },
+  handler: async (ctx, args) => {
+    const sets = await ctx.db
+      .query("sets")
+      .withIndex("by_program", (q) => q.eq("programId", args.programId))
+      .collect();
+
+    const days = [...new Set(sets.map((s) => s.day))].sort((a, b) => a - b);
+    return days.length > 0 ? days : [1];
   },
 });

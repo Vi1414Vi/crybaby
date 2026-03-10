@@ -31,7 +31,10 @@ export default defineSchema({
     programId: v.id("programs"),
     order: v.number(), // 1, 2, 3...
     numExercises: v.number(), // 2 or 3
-  }).index("by_program", ["programId"]),
+    day: v.number(), // which day this set belongs to (1, 2, 3...)
+  })
+    .index("by_program", ["programId"])
+    .index("by_program_day", ["programId", "day"]),
 
   exerciseSlots: defineTable({
     setId: v.id("sets"),
